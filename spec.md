@@ -238,7 +238,7 @@ If this picker proves too much for v0.1, the fallback is two `BasicTextField`s c
 
 ### 7.3 Boot
 
-- `BootReceiver` triggers on `BOOT_COMPLETED` and `LOCKED_BOOT_COMPLETED`. It iterates the index, recomputes the next reminder per event, reschedules.
+- `BootReceiver` triggers on `BOOT_COMPLETED` after credential-protected storage is available. It iterates the index, recomputes the next reminder per event, reschedules.
 - Deliberately keep the receiver fast — defer to `goAsync()` and a small coroutine scope.
 
 ### 7.4 Notification
