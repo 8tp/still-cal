@@ -91,19 +91,19 @@ internal object IcsWriter {
     }
 
     private fun StringBuilder.writeIcsLine(content: String) {
-        if (content.length <= MAX_OCTETS) {
+        val bytes = content.toByteArray(Charsets.UTF_8)
+        if (bytes.size <= MAX_OCTETS) {
             append(content).append(LINE_ENDING)
             return
         }
         // Fold to 75 octets per UTF-8 byte length, not character count.
-        val bytes = content.toByteArray(Charsets.UTF_8)
         var i = 0
         var first = true
         while (i < bytes.size) {
             val chunkSize = minOf(if (first) MAX_OCTETS else MAX_OCTETS - 1, bytes.size - i)
             // Don't split inside a multibyte UTF-8 sequence — back up to a code-point boundary.
             var end = i + chunkSize
-            while (end < bytes.size && (bytes[end].toInt() and 0xC0) == 0x80) end--
+            while (end > i && end < bytes.size && (bytes[end].toInt() and 0xC0) == 0x80) end--
             val piece = String(bytes, i, end - i, Charsets.UTF_8)
             if (!first) append(' ')
             append(piece)

@@ -280,6 +280,32 @@ class IcsRoundTripTest {
     }
 
     @Test
+    fun nonAsciiSummaryFoldsByUtf8Octets() {
+        val title = "\u00E9".repeat(40)
+        val event = Event(
+            id = "99999999-9999-9999-9999-999999999999",
+            title = title,
+            notes = "",
+            startEpochMs = epoch(2026, 5, 12, 9, 0),
+            endEpochMs = epoch(2026, 5, 12, 10, 0),
+            allDay = false,
+            tzId = zoneId,
+            rrule = null,
+            reminder = null,
+            createdAt = 1_700_000_000_000L,
+            updatedAt = 1_700_000_300_000L,
+        )
+
+        val text = IcsWriter.writeCalendar(event)
+        assertTrue("expected folded SUMMARY continuation", text.contains("SUMMARY:") && text.contains("\r\n "))
+        assertPhysicalLinesAtMost75Octets(text)
+
+        val raw = IcsParser.parseEvents(text).single()
+        val parsed = IcsTypes.toEvent(raw, now = event.updatedAt, deviceZone = zone)
+        assertEquals(title, parsed.title)
+    }
+
+    @Test
     fun unsupportedFixtureFieldsAreDroppedWithoutThrowing() {
         val ics = """
             BEGIN:VCALENDAR
@@ -336,6 +362,35 @@ class IcsRoundTripTest {
         assertEquals(once, twice)
     }
 
+    @Test
+    fun bulkCalendarWithTwoEventsParsesBothEvents() {
+        val first = Event(
+            id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            title = "first",
+            notes = "",
+            startEpochMs = epoch(2026, 5, 12, 9, 0),
+            endEpochMs = epoch(2026, 5, 12, 10, 0),
+            allDay = false,
+            tzId = zoneId,
+            rrule = null,
+            reminder = null,
+            createdAt = 1_700_000_000_000L,
+            updatedAt = 1_700_000_300_000L,
+        )
+        val second = first.copy(
+            id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            title = "second",
+            startEpochMs = epoch(2026, 5, 13, 11, 0),
+            endEpochMs = epoch(2026, 5, 13, 12, 0),
+        )
+
+        val events = IcsParser.parseEvents(IcsWriter.writeCalendarBulk(listOf(first, second)))
+            .map { IcsTypes.toEvent(it, now = 0L, deviceZone = zone) }
+
+        assertEquals(listOf(first.id, second.id), events.map { it.id })
+        assertEquals(listOf(first.title, second.title), events.map { it.title })
+    }
+
     private fun assertRoundTrip(event: Event) {
         val text = IcsWriter.writeCalendar(event)
         val raw = IcsParser.parseEvents(text).single()
@@ -353,5 +408,14 @@ class IcsRoundTripTest {
         // createdAt and updatedAt aren't carried in the .ics text (DTSTAMP records only
         // updatedAt at second precision and we re-stamp on write). The repository keeps
         // these in the JSON index — round-trip equality is across the .ics fields above.
+    }
+
+    private fun assertPhysicalLinesAtMost75Octets(text: String) {
+        text.split("\r\n")
+            .filter { it.isNotEmpty() }
+            .forEach { line ->
+                val octets = line.toByteArray(Charsets.UTF_8).size
+                assertTrue("expected at most 75 octets but got $octets for line: $line", octets <= 75)
+            }
     }
 }
