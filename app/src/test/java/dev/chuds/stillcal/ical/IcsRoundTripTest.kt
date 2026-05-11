@@ -391,6 +391,73 @@ class IcsRoundTripTest {
         assertEquals(listOf(first.title, second.title), events.map { it.title })
     }
 
+    @Test
+    fun unknownNestedBlockInsideEventDoesNotConsumeFollowingEvent() {
+        val ics = """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//test//test//EN
+            BEGIN:VEVENT
+            UID:with-unknown
+            DTSTART;TZID=America/New_York:20260512T090000
+            DTEND;TZID=America/New_York:20260512T100000
+            SUMMARY:first
+            BEGIN:X-STILL-UNKNOWN
+            BEGIN:X-STILL-CHILD
+            VALUE:ignored
+            END:X-STILL-CHILD
+            END:X-STILL-UNKNOWN
+            END:VEVENT
+            BEGIN:VEVENT
+            UID:after-unknown
+            DTSTART;TZID=America/New_York:20260513T110000
+            DTEND;TZID=America/New_York:20260513T120000
+            SUMMARY:second
+            END:VEVENT
+            END:VCALENDAR
+        """.trimIndent().replace("\n", "\r\n")
+
+        val events = IcsParser.parseEvents(ics)
+            .map { IcsTypes.toEvent(it, now = 0L, deviceZone = zone) }
+
+        assertEquals(listOf("with-unknown", "after-unknown"), events.map { it.id })
+        assertEquals(listOf("first", "second"), events.map { it.title })
+    }
+
+    @Test
+    fun topLevelVtimezoneBeforeEventDoesNotHideEvent() {
+        val ics = """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//test//test//EN
+            BEGIN:VTIMEZONE
+            TZID:America/New_York
+            BEGIN:STANDARD
+            DTSTART:20261101T020000
+            TZOFFSETFROM:-0400
+            TZOFFSETTO:-0500
+            END:STANDARD
+            BEGIN:DAYLIGHT
+            DTSTART:20260308T020000
+            TZOFFSETFROM:-0500
+            TZOFFSETTO:-0400
+            END:DAYLIGHT
+            END:VTIMEZONE
+            BEGIN:VEVENT
+            UID:after-timezone
+            DTSTART;TZID=America/New_York:20260512T090000
+            DTEND;TZID=America/New_York:20260512T100000
+            SUMMARY:after timezone
+            END:VEVENT
+            END:VCALENDAR
+        """.trimIndent().replace("\n", "\r\n")
+
+        val event = IcsTypes.toEvent(IcsParser.parseEvents(ics).single(), now = 0L, deviceZone = zone)
+
+        assertEquals("after-timezone", event.id)
+        assertEquals("after timezone", event.title)
+    }
+
     private fun assertRoundTrip(event: Event) {
         val text = IcsWriter.writeCalendar(event)
         val raw = IcsParser.parseEvents(text).single()
