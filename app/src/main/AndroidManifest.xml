@@ -11,9 +11,9 @@
     - POST_NOTIFICATIONS:    Required on Android 13+ to surface reminder notifications.
                              Requested at runtime, only the first time the user enables
                              a reminder on an event.
-    - SCHEDULE_EXACT_ALARM:  Required on Android 12+ for AlarmManager.setExactAndAllowWhileIdle.
-                             Reminders are useless if they fire 15 minutes late, and we have
-                             no foreground service to keep us alive otherwise.
+    - SCHEDULE_EXACT_ALARM:  Android 12+ special access for exact reminders. If the
+                             user revokes it, reminders fall back to setAndAllowWhileIdle
+                             instead of being dropped.
     - RECEIVE_BOOT_COMPLETED:Reschedule pending reminders after a reboot. AlarmManager forgets
                              everything across reboots, so without this every reminder dies.
 
