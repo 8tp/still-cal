@@ -81,7 +81,7 @@ fun StillCalApp(
     // Apply the cold-start default-view preference exactly once.
     LaunchedEffect(loadedSettings?.defaultView, initialApplied) {
         val loaded = loadedSettings ?: return@LaunchedEffect
-        if (!initialApplied) {
+        if (!initialApplied && incomingDateOpen == null && incomingViewUri == null) {
             initialApplied = true
             if (loaded.defaultView == DefaultView.Week) {
                 routeStack.clear()
@@ -93,6 +93,7 @@ fun StillCalApp(
     // Honor an incoming reminder-tap opening the day list for the event's date.
     LaunchedEffect(incomingDateOpen) {
         val date = incomingDateOpen ?: return@LaunchedEffect
+        initialApplied = true
         routeStack.clear()
         routeStack += Route.Month(YearMonth.from(date))
         routeStack += Route.DayList(date)
@@ -101,6 +102,7 @@ fun StillCalApp(
     // Honor an ACTION_VIEW text/calendar payload — import then jump to first imported event.
     LaunchedEffect(incomingViewUri) {
         val uri = incomingViewUri ?: return@LaunchedEffect
+        initialApplied = true
         scope.launch {
             val result = importIcsFromSingleUri(activityContext, uri, eventsRepository)
             Toast.makeText(
