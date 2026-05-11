@@ -58,12 +58,12 @@ Block-level parsing, type mapping, and writing are split across `IcsLexer.kt`, `
 
 ## What it asks for honestly
 
-Three permissions are unavoidable for a calendar with reminders. Each is requested at the moment it matters, and none touches the network.
+Three permissions are unavoidable for a calendar with reminders. The notification runtime permission is requested at the moment it matters; exact-alarm access is checked when reminders are saved. None touches the network.
 
 | Permission | Why it's there |
 | --- | --- |
 | `POST_NOTIFICATIONS` | Android 13+ runtime requirement to surface a reminder notification. Asked the first time a reminder is enabled on an event. |
-| `SCHEDULE_EXACT_ALARM` | Android 12+ runtime requirement for `setExactAndAllowWhileIdle`. A reminder that fires fifteen minutes late is broken. |
+| `SCHEDULE_EXACT_ALARM` | Android 12+ special access for exact reminder delivery. If the user revokes it, Still Cal warns at save time and uses the platform's inexact idle-tolerant alarm rather than dropping the reminder. |
 | `RECEIVE_BOOT_COMPLETED` | `AlarmManager` forgets every scheduled alarm across reboots; without this, tomorrow's 9am reminder dies after tonight's reboot. |
 
 ## Privacy posture, in code

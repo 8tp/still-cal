@@ -27,7 +27,7 @@ This app must satisfy every line of the still pact:
 Three permissions ARE declared because they are unavoidable for a calendar with reminders. Each gets a row in the README's "what it refuses to do (and what it asks for honestly)" table:
 
 - `POST_NOTIFICATIONS` — Android 13+ runtime requirement to surface a notification. Asked the first time a reminder is enabled on an event.
-- `SCHEDULE_EXACT_ALARM` — Android 12+ runtime requirement for `setExactAndAllowWhileIdle`. A reminder that fires fifteen minutes late is broken.
+- `SCHEDULE_EXACT_ALARM` — Android 12+ special access for exact reminder delivery. If unavailable, save the event, show the exact-alarm toast, and fall back to the platform's inexact idle-tolerant alarm rather than dropping the reminder.
 - `RECEIVE_BOOT_COMPLETED` — `AlarmManager` forgets every scheduled alarm across reboots; without this the reminder for tomorrow's 9am stops mattering after tonight's reboot.
 
 None involve the network. None pull a third-party SDK.
@@ -227,7 +227,7 @@ If this picker proves too much for v0.1, the fallback is two `BasicTextField`s c
 
 ### 7.1 Scheduling
 
-- When an event with a reminder is saved (created or updated), compute the next occurrence's reminder timestamp and call `AlarmManager.setExactAndAllowWhileIdle(RTC_WAKEUP, triggerAtMs, pendingIntent)`.
+- When an event with a reminder is saved (created or updated), compute the next occurrence's reminder timestamp and call `AlarmManager.setExactAndAllowWhileIdle(RTC_WAKEUP, triggerAtMs, pendingIntent)` when exact-alarm access is available. If access is unavailable, warn and use `setAndAllowWhileIdle` as an honest fallback.
 - The `PendingIntent` targets `ReminderReceiver` with extras: event id, the occurrence's local date.
 - Use the event id's hashcode (positive) as the request code so reschedules replace the prior alarm.
 
