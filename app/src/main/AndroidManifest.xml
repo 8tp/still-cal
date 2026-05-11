@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android manifest for Still Cal.
+
+    Privacy posture (matches still-launcher / still-notes):
+    - No INTERNET permission. Ever.
+    - No analytics, telemetry, or background services beyond what reminders strictly require.
+    - Events are stored as plain .ics files in app-private storage.
+
+    Permissions (each disclosed honestly in the README):
+    - POST_NOTIFICATIONS:    Required on Android 13+ to surface reminder notifications.
+                             Requested at runtime, only the first time the user enables
+                             a reminder on an event.
+    - SCHEDULE_EXACT_ALARM:  Required on Android 12+ for AlarmManager.setExactAndAllowWhileIdle.
+                             Reminders are useless if they fire 15 minutes late, and we have
+                             no foreground service to keep us alive otherwise.
+    - RECEIVE_BOOT_COMPLETED:Reschedule pending reminders after a reboot. AlarmManager forgets
+                             everything across reboots, so without this every reminder dies.
+
+    None of the three involves the network or any third-party SDK.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:icon="@drawable/ic_still_cal_launcher"
+        android:roundIcon="@drawable/ic_still_cal_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.StillCal"
+        android:usesCleartextTraffic="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Lets other apps hand a single .ics file to still-cal via the system file picker. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/calendar" />
+            </intent-filter>
+        </activity>
+
+        <!-- Fires the notification when an alarm pops. Not exported. -->
+        <receiver
+            android:name=".reminders.ReminderReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- Reschedules pending reminders after a reboot. -->
+        <receiver
+            android:name=".reminders.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

@@ -1,0 +1,6 @@
+<!-- App strings. Keep names short and quiet, like the launcher and notes. -->
+<resources>
+    <string name="app_name">Still Cal</string>
+    <string name="reminder_channel_name">reminders</string>
+    <string name="reminder_channel_description">event reminders, scheduled locally</string>
+</resources>
