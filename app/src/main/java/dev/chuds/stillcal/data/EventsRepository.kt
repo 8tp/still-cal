@@ -103,7 +103,8 @@ class EventsRepository private constructor(
     }
 
     /**
-     * Import a parsed VEVENT. Generates a new id if the parsed UID is already taken.
+     * Import a parsed VEVENT. Keeps a safe external UID when possible; otherwise generates
+     * a local id so path-like UIDs cannot escape eventsDir.
      */
     suspend fun importEvent(parsed: Event): Event = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
@@ -111,8 +112,9 @@ class EventsRepository private constructor(
             ensureLoadedLocked()
             // Re-check UID collision *inside* the mutex — two concurrent imports of the
             // same UID would otherwise both pass the outer check and produce duplicate ids.
-            val collision = _events.value.any { it.id == parsed.id }
-            val id = if (collision) UUID.randomUUID().toString() else parsed.id
+            val importedId = safeImportedId(parsed.id)
+            val collision = importedId != null && _events.value.any { it.id == importedId }
+            val id = if (importedId == null || collision) UUID.randomUUID().toString() else importedId
             val event = parsed.copy(
                 id = id,
                 createdAt = if (parsed.createdAt == 0L) now else parsed.createdAt,
@@ -254,6 +256,11 @@ class EventsRepository private constructor(
      * Pure recurrence math — no Android dependencies, trivially unit-testable.
      */
     companion object {
+
+        private val SAFE_IMPORTED_ID = Regex("[A-Za-z0-9._-]{1,128}")
+
+        private fun safeImportedId(id: String): String? =
+            id.takeIf { it.isNotBlank() && SAFE_IMPORTED_ID.matches(it) && !it.startsWith(".") }
 
         fun occurrencesIntersecting(
             event: Event,

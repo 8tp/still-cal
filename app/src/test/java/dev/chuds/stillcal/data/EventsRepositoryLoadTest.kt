@@ -5,6 +5,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class EventsRepositoryLoadTest {
@@ -22,6 +24,22 @@ class EventsRepositoryLoadTest {
             coldRepository.load()
 
             assertEquals(listOf("existing", "incoming"), coldRepository.events.value.map { it.id }.sorted())
+        } finally {
+            filesRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun importEventGeneratesLocalIdForPathLikeUid() = runBlocking {
+        val filesRoot = Files.createTempDirectory("events-repository-test").toFile()
+        try {
+            val repository = EventsRepository(filesRoot)
+
+            val imported = repository.importEvent(testEvent("../outside", LocalDate.of(2026, 5, 3)))
+
+            assertNotEquals("../outside", imported.id)
+            assertFalse(filesRoot.resolve("outside.ics").exists())
+            assertEquals(listOf(imported.id), repository.events.value.map { it.id })
         } finally {
             filesRoot.deleteRecursively()
         }

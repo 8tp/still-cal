@@ -4,6 +4,7 @@ import dev.chuds.stillcal.data.Event
 import dev.chuds.stillcal.data.Recurrence
 import dev.chuds.stillcal.data.ReminderOffset
 import java.time.ZoneId
+import java.time.ZoneOffset
 
 /**
  * Serialize [Event] back to iCalendar text. Output is the exact subset the parser accepts,
@@ -51,6 +52,9 @@ internal object IcsWriter {
         if (event.allDay) {
             out.writeIcsLine("DTSTART;VALUE=DATE:${IcsTypes.formatDate(event.startEpochMs, zone)}")
             out.writeIcsLine("DTEND;VALUE=DATE:${IcsTypes.formatDate(event.endEpochMs, zone)}")
+        } else if (zone.normalized() == ZoneOffset.UTC) {
+            out.writeIcsLine("DTSTART:${IcsTypes.formatUtcStamp(event.startEpochMs)}")
+            out.writeIcsLine("DTEND:${IcsTypes.formatUtcStamp(event.endEpochMs)}")
         } else {
             out.writeIcsLine("DTSTART;TZID=$effectiveZoneId:${IcsTypes.formatZoned(event.startEpochMs, zone)}")
             out.writeIcsLine("DTEND;TZID=$effectiveZoneId:${IcsTypes.formatZoned(event.endEpochMs, zone)}")

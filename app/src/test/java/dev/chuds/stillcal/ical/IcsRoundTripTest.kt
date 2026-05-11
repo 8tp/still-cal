@@ -134,6 +134,34 @@ class IcsRoundTripTest {
     }
 
     @Test
+    fun utcDateTimesWriteBackAsZuluDateTimes() {
+        val ics = """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//test//test//EN
+            BEGIN:VEVENT
+            UID:utc
+            DTSTART:20260512T140000Z
+            DTEND:20260512T150000Z
+            SUMMARY:utc meeting
+            END:VEVENT
+            END:VCALENDAR
+        """.trimIndent().replace("\n", "\r\n")
+
+        val event = IcsTypes.toEvent(
+            IcsParser.parseEvents(ics).single(),
+            now = 0L,
+            deviceZone = ZoneId.of("America/New_York"),
+        )
+        assertEquals("Z", event.tzId)
+
+        val written = IcsWriter.writeCalendar(event)
+        assertTrue(written.contains("DTSTART:20260512T140000Z\r\n"))
+        assertTrue(written.contains("DTEND:20260512T150000Z\r\n"))
+        assertFalse(written.contains("TZID=Z"))
+    }
+
+    @Test
     fun malformedDtstartDoesNotCrashMapping() {
         // A VEVENT with a garbage DTSTART value. The parser produces a RawVEvent, but
         // IcsTypes.toEvent throws DateTimeParseException — callers must runCatching this.
