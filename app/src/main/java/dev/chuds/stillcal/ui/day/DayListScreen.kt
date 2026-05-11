@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import dev.chuds.stillcal.data.CalSettings
 import dev.chuds.stillcal.data.Event
@@ -153,15 +154,16 @@ private fun Header(date: LocalDate) {
             .fillMaxWidth()
             .padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 12.dp),
     ) {
-        val weekday = date.dayOfWeek.getDisplayName(JTextStyle.FULL, Locale.getDefault())
-        val monthName = date.month.getDisplayName(JTextStyle.FULL, Locale.getDefault())
+        val locale = LocalConfiguration.current.locales[0]
+        val weekday = date.dayOfWeek.getDisplayName(JTextStyle.FULL, locale)
+        val monthName = date.month.getDisplayName(JTextStyle.FULL, locale)
         Text(
             text = "$weekday, $monthName ${date.dayOfMonth}",
             style = StillTypography.Display,
             color = StillColors.SoftWhite,
         )
         Text(
-            text = "${monthName.uppercase()} ${date.year}",
+            text = "${monthName.uppercase(locale)} ${date.year}",
             style = StillTypography.Kicker,
             color = StillColors.DimGray,
             modifier = Modifier.padding(top = 4.dp),

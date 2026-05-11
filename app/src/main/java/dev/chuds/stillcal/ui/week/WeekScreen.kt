@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import dev.chuds.stillcal.data.CalSettings
 import dev.chuds.stillcal.data.Event
@@ -125,13 +126,14 @@ fun WeekScreen(
 
 @Composable
 private fun Header(start: LocalDate) {
+    val locale = LocalConfiguration.current.locales[0]
     val end = start.plusDays(6)
     val sameMonth = start.month == end.month
     val rangeText = if (sameMonth) {
-        "${start.month.getDisplayName(JTextStyle.FULL, Locale.getDefault())} ${start.dayOfMonth}–${end.dayOfMonth}"
+        "${start.month.getDisplayName(JTextStyle.FULL, locale)} ${start.dayOfMonth}–${end.dayOfMonth}"
     } else {
-        val s = start.format(DateTimeFormatter.ofPattern("MMM d", Locale.getDefault()))
-        val e = end.format(DateTimeFormatter.ofPattern("MMM d", Locale.getDefault()))
+        val s = start.format(DateTimeFormatter.ofPattern("MMM d", locale))
+        val e = end.format(DateTimeFormatter.ofPattern("MMM d", locale))
         "$s – $e"
     }
     Column(
@@ -160,6 +162,7 @@ private fun DayRow(
     onOpenDay: (LocalDate) -> Unit,
     onOpenEvent: (String) -> Unit,
 ) {
+    val locale = LocalConfiguration.current.locales[0]
     val dayEvents = remember(events, date) {
         // occurrencesIntersecting for a single-day range yields at most one date per event,
         // so a plain filter is sufficient — no distinctBy needed.
@@ -184,7 +187,7 @@ private fun DayRow(
     ) {
         Column(modifier = Modifier.width(56.dp)) {
             Text(
-                text = date.dayOfWeek.getDisplayName(JTextStyle.SHORT, Locale.getDefault()).lowercase(),
+                text = date.dayOfWeek.getDisplayName(JTextStyle.SHORT, locale).lowercase(locale),
                 style = StillTypography.Caption,
                 color = StillColors.DimGray,
             )

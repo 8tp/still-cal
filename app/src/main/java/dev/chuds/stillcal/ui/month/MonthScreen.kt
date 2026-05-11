@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import dev.chuds.stillcal.data.CalSettings
 import dev.chuds.stillcal.data.Event
@@ -139,6 +140,7 @@ private fun Header(
     onPrev: () -> Unit,
     onNext: () -> Unit,
 ) {
+    val locale = LocalConfiguration.current.locales[0]
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -165,7 +167,7 @@ private fun Header(
         }
 
         Text(
-            text = month.month.getDisplayName(JTextStyle.FULL, Locale.getDefault()).lowercase(),
+            text = month.month.getDisplayName(JTextStyle.FULL, locale).lowercase(locale),
             style = StillTypography.Display,
             color = StillColors.SoftWhite,
             modifier = Modifier.padding(top = 2.dp),
