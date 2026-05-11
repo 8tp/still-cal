@@ -6,8 +6,7 @@ import android.net.Uri
 import android.widget.Toast
 import dev.chuds.stillcal.ical.IcsParser
 import dev.chuds.stillcal.ical.IcsTypes
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import java.io.InputStream
 import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -55,7 +54,11 @@ suspend fun importIcsFromUris(
     val imported = mutableListOf<Event>()
     var skipped = 0
     uris.forEach { uri ->
-        val text = readTextFromUri(context.contentResolver, uri) ?: return@forEach
+        val text = readTextFromUri(context, uri)
+        if (text == null) {
+            skipped++
+            return@forEach
+        }
         val rawEvents = runCatching { IcsParser.parseEvents(text) }.getOrElse {
             skipped++
             return@forEach
@@ -85,8 +88,8 @@ suspend fun importIcsFromSingleUri(
     repository: EventsRepository,
 ): ImportResult = withContext(Dispatchers.IO) {
     val zone = ZoneId.systemDefault()
-    val text = readTextFromUri(context.contentResolver, uri)
-        ?: return@withContext ImportResult(emptyList(), 0)
+    val text = readTextFromUri(context, uri)
+        ?: return@withContext ImportResult(emptyList(), 1)
     val rawEvents = runCatching { IcsParser.parseEvents(text) }.getOrElse {
         return@withContext ImportResult(emptyList(), 1)
     }
@@ -106,11 +109,50 @@ suspend fun importIcsFromSingleUri(
     ImportResult(imported = imported, skipped = skipped)
 }
 
-private fun readTextFromUri(resolver: ContentResolver, uri: Uri): String? = runCatching {
-    resolver.openInputStream(uri)?.use { stream ->
-        BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
+/**
+ * Hard ceiling on SAF text reads. Anything past this is almost certainly hostile or
+ * mis-targeted (real calendars are kilobytes, the largest published Google Calendar
+ * export the author has seen is ~6 MiB). Streaming the byte count lets us abort early
+ * instead of buffering a multi-GB blob into memory.
+ */
+internal const val MAX_IMPORT_BYTES: Long = 32L * 1024 * 1024
+
+internal sealed class ReadResult {
+    data class Ok(val text: String) : ReadResult()
+    data object TooLarge : ReadResult()
+    data object Failed : ReadResult()
+}
+
+internal fun readBoundedText(stream: InputStream, maxBytes: Long): ReadResult = runCatching {
+    val buffer = ByteArray(8 * 1024)
+    val out = java.io.ByteArrayOutputStream()
+    var total = 0L
+    while (true) {
+        val n = stream.read(buffer)
+        if (n < 0) break
+        total += n
+        if (total > maxBytes) return@runCatching ReadResult.TooLarge
+        out.write(buffer, 0, n)
     }
-}.getOrNull()
+    ReadResult.Ok(out.toString(Charsets.UTF_8.name()))
+}.getOrElse { ReadResult.Failed }
+
+private fun readTextFromUri(context: Context, uri: Uri): String? {
+    val resolver: ContentResolver = context.contentResolver
+    val result = runCatching {
+        resolver.openInputStream(uri)?.use { stream ->
+            readBoundedText(stream, MAX_IMPORT_BYTES)
+        } ?: ReadResult.Failed
+    }.getOrElse { ReadResult.Failed }
+    return when (result) {
+        is ReadResult.Ok -> result.text
+        ReadResult.TooLarge -> {
+            toastOnMain(context, "file too large to import")
+            null
+        }
+        ReadResult.Failed -> null
+    }
+}
 
 private fun toastOnMain(context: Context, message: String) {
     android.os.Handler(context.mainLooper).post {
