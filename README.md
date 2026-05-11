@@ -4,6 +4,8 @@
 
 #### A quiet calendar for Android.
 
+part of the [still](../STILL.md) family. the pact governs every line of code in this repo.
+
 <br>
 
 <img src="docs/screenshots/month.png" width="180" alt="Month grid — day numbers in serif, today emphasized, hairline dots beneath days with events">&nbsp;<img src="docs/screenshots/day.png" width="180" alt="Day list — chronological events for a date with start/end times in monospace">&nbsp;<img src="docs/screenshots/event.png" width="180" alt="Event editor — single scrollable column for title, all-day, start, end, repeat, reminder, notes">&nbsp;<img src="docs/screenshots/settings.png" width="180" alt="Settings — font preset, default view, week start, time format, import, export, delete all">
