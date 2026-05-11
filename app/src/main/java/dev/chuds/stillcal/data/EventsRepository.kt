@@ -22,8 +22,10 @@ import org.json.JSONObject
  * File-backed events store. Mirrors NotesRepository in still-notes.
  *
  * Layout under filesDir:
- *   events/<id>.ics    one VEVENT per file, wrapped in a VCALENDAR envelope
- *   index.json         metadata for fast list/grid rendering
+ *   events/<safeName>.ics  one VEVENT per file, wrapped in a VCALENDAR envelope. The
+ *                          filename is a sanitized derivative of the event id; the
+ *                          authoritative UID lives in the file's UID property.
+ *   index.json             metadata for fast list/grid rendering
  */
 class EventsRepository private constructor(
     private val eventsDir: File,
@@ -103,8 +105,9 @@ class EventsRepository private constructor(
     }
 
     /**
-     * Import a parsed VEVENT. Keeps a safe external UID when possible; otherwise generates
-     * a local id so path-like UIDs cannot escape eventsDir.
+     * Import a parsed VEVENT. The verbatim external UID is preserved as the event id so a
+     * re-import of the same .ics dedupes; on disk the filename is a sanitized derivative of
+     * that id so path-like UIDs cannot escape eventsDir.
      */
     suspend fun importEvent(parsed: Event): Event = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
@@ -112,9 +115,10 @@ class EventsRepository private constructor(
             ensureLoadedLocked()
             // Re-check UID collision *inside* the mutex — two concurrent imports of the
             // same UID would otherwise both pass the outer check and produce duplicate ids.
-            val importedId = safeImportedId(parsed.id)
-            val collision = importedId != null && _events.value.any { it.id == importedId }
-            val id = if (importedId == null || collision) UUID.randomUUID().toString() else importedId
+            val externalUid = parsed.id.takeIf { it.isNotBlank() }
+            val existing = externalUid?.let { uid -> _events.value.firstOrNull { it.id == uid } }
+            if (existing != null) return@withLock existing
+            val id = externalUid ?: UUID.randomUUID().toString()
             val event = parsed.copy(
                 id = id,
                 createdAt = if (parsed.createdAt == 0L) now else parsed.createdAt,
@@ -146,7 +150,7 @@ class EventsRepository private constructor(
         }
     }
 
-    private fun eventFile(id: String): File = File(eventsDir, "$id.ics")
+    private fun eventFile(id: String): File = File(eventsDir, "${safeFileNameForId(id)}.ics")
 
     private fun loadLocked() {
         val loadedEvents = readIndex() ?: rebuildIndexFromDisk()
@@ -257,10 +261,21 @@ class EventsRepository private constructor(
      */
     companion object {
 
-        private val SAFE_IMPORTED_ID = Regex("[A-Za-z0-9._-]{1,128}")
+        private val UNSAFE_FILENAME_CHARS = Regex("[^A-Za-z0-9._-]")
+        private const val MAX_FILENAME_LEN = 96
 
-        private fun safeImportedId(id: String): String? =
-            id.takeIf { it.isNotBlank() && SAFE_IMPORTED_ID.matches(it) && !it.startsWith(".") }
+        /**
+         * Derive a path-traversal-safe filename stem from an arbitrary event id. Real-world
+         * iCalendar UIDs frequently contain `@`, `:`, `/`, etc. — we replace anything outside
+         * `[A-Za-z0-9._-]` with `_`, strip leading dots, and append a short stable hash so
+         * distinct ids whose sanitized prefixes collide still get distinct files.
+         */
+        internal fun safeFileNameForId(id: String): String {
+            val sanitized = UNSAFE_FILENAME_CHARS.replace(id, "_").trimStart('.')
+            val stem = sanitized.take(MAX_FILENAME_LEN).ifBlank { "event" }
+            val suffix = Integer.toHexString(id.hashCode() and 0x7FFFFFFF)
+            return "$stem-$suffix"
+        }
 
         fun occurrencesIntersecting(
             event: Event,

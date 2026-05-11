@@ -6,7 +6,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EventsRepositoryLoadTest {
@@ -30,16 +30,44 @@ class EventsRepositoryLoadTest {
     }
 
     @Test
-    fun importEventGeneratesLocalIdForPathLikeUid() = runBlocking {
+    fun importEventKeepsPathLikeUidButSanitizesFilename() = runBlocking {
         val filesRoot = Files.createTempDirectory("events-repository-test").toFile()
         try {
             val repository = EventsRepository(filesRoot)
 
             val imported = repository.importEvent(testEvent("../outside", LocalDate.of(2026, 5, 3)))
 
-            assertNotEquals("../outside", imported.id)
+            assertEquals("../outside", imported.id)
             assertFalse(filesRoot.resolve("outside.ics").exists())
-            assertEquals(listOf(imported.id), repository.events.value.map { it.id })
+            assertFalse(filesRoot.resolve("../outside.ics").exists())
+            val eventsDir = filesRoot.resolve("events")
+            val onDisk = eventsDir.listFiles()?.map { it.name } ?: emptyList()
+            assertEquals(1, onDisk.size)
+            assertTrue("filename should be sanitized, was ${onDisk.single()}",
+                onDisk.single().matches(Regex("[A-Za-z0-9._-]+\\.ics")))
+            assertEquals(listOf("../outside"), repository.events.value.map { it.id })
+        } finally {
+            filesRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun importEventDedupesGoogleStyleUidOnReimport() = runBlocking {
+        val filesRoot = Files.createTempDirectory("events-repository-test").toFile()
+        try {
+            val repository = EventsRepository(filesRoot)
+            val uid = "abc-123@google.com"
+
+            val first = repository.importEvent(testEvent(uid, LocalDate.of(2026, 5, 4)))
+            val second = repository.importEvent(testEvent(uid, LocalDate.of(2026, 5, 4)))
+
+            assertEquals(uid, first.id)
+            assertEquals(first.id, second.id)
+            assertEquals(listOf(uid), repository.events.value.map { it.id })
+            val eventsDir = filesRoot.resolve("events")
+            val files = eventsDir.listFiles()?.toList() ?: emptyList()
+            assertEquals(1, files.size)
+            assertFalse("filename must not contain @", files.single().name.contains('@'))
         } finally {
             filesRoot.deleteRecursively()
         }
