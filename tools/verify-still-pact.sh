@@ -221,7 +221,7 @@ def merged_manifests(root):
     for path in intermediates.rglob("AndroidManifest.xml"):
         rel = path.relative_to(root)
         parts = rel.parts
-        if any("merged" in part for part in parts):
+        if any("merged" in part for part in parts) or "packaged_manifests" in parts:
             manifests.append(path)
     return sorted(set(manifests))
 
