@@ -169,7 +169,7 @@ fun StillCalApp(
                     importToastMessage(result),
                     Toast.LENGTH_SHORT,
                 ).show()
-                eventsRepository.events.value.forEach { ev ->
+                result.imported.forEach { ev ->
                     RemindersScheduler.scheduleNext(activityContext, ev, eventsRepository)
                 }
             }
