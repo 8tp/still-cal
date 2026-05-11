@@ -85,6 +85,11 @@ def manifest_names(path, tag_names):
     return names
 
 
+def manifest_has_tag(path, tag_name):
+    root_element = read_xml(path)
+    return any(local_name(element.tag) == tag_name for element in root_element.iter())
+
+
 def manifest_package(path):
     return read_xml(path).attrib.get("package")
 
@@ -239,6 +244,8 @@ source_permission_names = []
 if expected_permissions is not None and manifest.is_file():
     try:
         source_permission_names = manifest_names(manifest, USE_PERMISSION_TAGS)
+        if manifest_has_tag(manifest, "queries"):
+            errors.append(f"{name}: source manifest has unexpected <queries> block")
         source_permissions = set(source_permission_names)
         compare_exact(errors, f"{name}: source manifest", source_permissions, expected_permissions)
 
@@ -254,6 +261,8 @@ if expected_permissions is not None and manifest.is_file():
         rel = source_manifest.relative_to(root)
         try:
             variant_permissions = manifest_names(source_manifest, USE_PERMISSION_TAGS)
+            if manifest_has_tag(source_manifest, "queries"):
+                errors.append(f"{name}: {rel} has unexpected <queries> block")
             duplicate_variant = [item for item, count in Counter(variant_permissions).items() if count > 1]
             if duplicate_variant:
                 errors.append(f"{name}: {rel} duplicate permissions: {format_names(duplicate_variant)}")
@@ -317,6 +326,8 @@ if expected_permissions is not None:
             )
 
             permission_declarations = set(manifest_names(merged_manifest, {"permission"}))
+            if manifest_has_tag(merged_manifest, "queries"):
+                errors.append(f"{name}: {rel} has unexpected <queries> block")
             unexpected_declarations = {
                 permission
                 for permission in permission_declarations
