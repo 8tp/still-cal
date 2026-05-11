@@ -25,24 +25,35 @@ import org.json.JSONObject
  *   events/<id>.ics    one VEVENT per file, wrapped in a VCALENDAR envelope
  *   index.json         metadata for fast list/grid rendering
  */
-class EventsRepository(context: Context) {
+class EventsRepository private constructor(
+    private val eventsDir: File,
+    private val indexFile: File,
+) {
 
-    private val eventsDir: File = File(context.filesDir, "events").apply { if (!exists()) mkdirs() }
-    private val indexFile: File = File(context.filesDir, "events_index.json")
+    constructor(context: Context) : this(context.filesDir)
+
+    internal constructor(filesRoot: File) : this(
+        eventsDir = File(filesRoot, "events").apply { if (!exists()) mkdirs() },
+        indexFile = File(filesRoot, "events_index.json"),
+    )
+
     private val ioMutex = Mutex()
+    private var loaded = false
 
     private val _events = MutableStateFlow<List<Event>>(emptyList())
     val events: StateFlow<List<Event>> = _events.asStateFlow()
 
     suspend fun load() = withContext(Dispatchers.IO) {
         ioMutex.withLock {
-            val loaded = readIndex() ?: rebuildIndexFromDisk()
-            _events.value = loaded.sortedBy { it.startEpochMs }
+            loadLocked()
         }
     }
 
     suspend fun get(id: String): Event? = withContext(Dispatchers.IO) {
-        _events.value.firstOrNull { it.id == id }
+        ioMutex.withLock {
+            ensureLoadedLocked()
+            _events.value.firstOrNull { it.id == id }
+        }
     }
 
     suspend fun create(template: Event): Event = withContext(Dispatchers.IO) {
@@ -50,6 +61,7 @@ class EventsRepository(context: Context) {
         val now = System.currentTimeMillis()
         val event = template.copy(id = id, createdAt = now, updatedAt = now)
         ioMutex.withLock {
+            ensureLoadedLocked()
             eventFile(id).writeText(IcsWriter.writeCalendar(event))
             val next = _events.value + event
             writeIndex(next)
@@ -62,6 +74,7 @@ class EventsRepository(context: Context) {
         val now = System.currentTimeMillis()
         val refreshed = event.copy(updatedAt = now)
         ioMutex.withLock {
+            ensureLoadedLocked()
             eventFile(refreshed.id).writeText(IcsWriter.writeCalendar(refreshed))
             val next = _events.value.filterNot { it.id == refreshed.id } + refreshed
             writeIndex(next)
@@ -72,6 +85,7 @@ class EventsRepository(context: Context) {
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
         ioMutex.withLock {
+            ensureLoadedLocked()
             eventFile(id).delete()
             val next = _events.value.filterNot { it.id == id }
             writeIndex(next)
@@ -83,6 +97,7 @@ class EventsRepository(context: Context) {
         ioMutex.withLock {
             eventsDir.listFiles()?.forEach { it.delete() }
             indexFile.delete()
+            loaded = true
             _events.value = emptyList()
         }
     }
@@ -93,6 +108,7 @@ class EventsRepository(context: Context) {
     suspend fun importEvent(parsed: Event): Event = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         ioMutex.withLock {
+            ensureLoadedLocked()
             // Re-check UID collision *inside* the mutex — two concurrent imports of the
             // same UID would otherwise both pass the outer check and produce duplicate ids.
             val collision = _events.value.any { it.id == parsed.id }
@@ -122,10 +138,23 @@ class EventsRepository(context: Context) {
      * Bulk export — single VCALENDAR envelope containing every event's VEVENT.
      */
     suspend fun bulkIcs(): String = withContext(Dispatchers.IO) {
-        IcsWriter.writeCalendarBulk(_events.value.sortedBy { it.startEpochMs })
+        ioMutex.withLock {
+            ensureLoadedLocked()
+            IcsWriter.writeCalendarBulk(_events.value.sortedBy { it.startEpochMs })
+        }
     }
 
     private fun eventFile(id: String): File = File(eventsDir, "$id.ics")
+
+    private fun loadLocked() {
+        val loadedEvents = readIndex() ?: rebuildIndexFromDisk()
+        _events.value = loadedEvents.sortedBy { it.startEpochMs }
+        loaded = true
+    }
+
+    private fun ensureLoadedLocked() {
+        if (!loaded) loadLocked()
+    }
 
     /**
      * Expand the event's occurrences that touch [dateRange]. For one-shot events this is at most
