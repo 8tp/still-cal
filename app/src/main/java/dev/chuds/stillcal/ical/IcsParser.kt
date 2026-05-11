@@ -89,19 +89,20 @@ internal object IcsParser {
         return RawVAlarm(props) to i
     }
 
-    /**
-     * Consume an unrecognized BEGIN…END block. Only [blockName]'s END decrements depth —
-     * mismatched ENDs (e.g. END:FOO inside a BEGIN:BAR block) are tolerated as data, not
-     * treated as block delimiters.
-     */
     private fun skipBlock(lines: List<String>, start: Int, blockName: String): Int {
         var i = start
-        var depth = 1
-        while (i < lines.size && depth > 0) {
+        val stack = mutableListOf(blockName)
+        while (i < lines.size && stack.isNotEmpty()) {
             val prop = parseProperty(lines[i])
             i++
-            if (prop.name == "BEGIN") depth++
-            else if (prop.name == "END" && prop.value == blockName) depth--
+            if (prop.name == "BEGIN") {
+                stack += prop.value
+            } else if (prop.name == "END") {
+                val matchingIndex = stack.lastIndexOf(prop.value)
+                if (matchingIndex >= 0) {
+                    while (stack.size > matchingIndex) stack.removeAt(stack.lastIndex)
+                }
+            }
         }
         return i
     }

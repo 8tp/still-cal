@@ -10,14 +10,14 @@ import kotlinx.coroutines.launch
 
 /**
  * AlarmManager forgets every scheduled alarm across a reboot, so without this BOOT_COMPLETED
- * handler every reminder dies on first reboot. Direct-boot friendly via LOCKED_BOOT_COMPLETED.
+ * handler every reminder dies on first reboot. Event storage is credential-protected, so
+ * rescheduling happens after the user unlocks and BOOT_COMPLETED is delivered.
  */
 class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_LOCKED_BOOT_COMPLETED -> Unit
+            Intent.ACTION_BOOT_COMPLETED -> Unit
             else -> return
         }
         val pending = goAsync()

@@ -70,17 +70,18 @@ fun EventEditScreen(
     val initial = remember(existing, defaultDate) {
         existing ?: blankEvent(defaultDate, zone)
     }
+    val formKey = initial.id.ifBlank { "new:$defaultDate" }
 
-    var title by remember { mutableStateOf(initial.title) }
-    var notes by remember { mutableStateOf(initial.notes) }
-    var allDay by remember { mutableStateOf(initial.allDay) }
-    var startDate by remember { mutableStateOf(initial.startDate(zone)) }
-    var startTime by remember { mutableStateOf(initial.startTime(zone)) }
-    var endDate by remember { mutableStateOf(initial.endDate(zone)) }
-    var endTime by remember { mutableStateOf(initial.endTime(zone)) }
-    var recurrence by remember { mutableStateOf(initial.rrule.kind()) }
-    var until by remember { mutableStateOf(initial.rrule?.until ?: startDate.plusMonths(3)) }
-    var reminder by remember { mutableStateOf(initial.reminder) }
+    var title by remember(formKey) { mutableStateOf(initial.title) }
+    var notes by remember(formKey) { mutableStateOf(initial.notes) }
+    var allDay by remember(formKey) { mutableStateOf(initial.allDay) }
+    var startDate by remember(formKey) { mutableStateOf(initial.startDate(zone)) }
+    var startTime by remember(formKey) { mutableStateOf(initial.startTime(zone)) }
+    var endDate by remember(formKey) { mutableStateOf(initial.endDate(zone)) }
+    var endTime by remember(formKey) { mutableStateOf(initial.endTime(zone)) }
+    var recurrence by remember(formKey) { mutableStateOf(initial.rrule.kind()) }
+    var until by remember(formKey) { mutableStateOf(initial.rrule?.until ?: startDate.plusMonths(3)) }
+    var reminder by remember(formKey) { mutableStateOf(initial.reminder) }
 
     // Snap end past start whenever start moves past it.
     LaunchedEffect(startDate, startTime, allDay) {

@@ -4,6 +4,8 @@
 
 #### A quiet calendar for Android.
 
+part of the [still](STILL.md) family. the pact governs every line of code in this repo.
+
 <br>
 
 <img src="docs/screenshots/month.png" width="180" alt="Month grid — day numbers in serif, today emphasized, hairline dots beneath days with events">&nbsp;<img src="docs/screenshots/day.png" width="180" alt="Day list — chronological events for a date with start/end times in monospace">&nbsp;<img src="docs/screenshots/event.png" width="180" alt="Event editor — single scrollable column for title, all-day, start, end, repeat, reminder, notes">&nbsp;<img src="docs/screenshots/settings.png" width="180" alt="Settings — font preset, default view, week start, time format, import, export, delete all">
@@ -25,7 +27,7 @@ It declares no internet permission. It ships no analytics. It depends on neither
 - A **day list**: tap any day in the month grid to open a chronological list of that day's events. All-day events float to the top.
 - An **event editor** as a single scrollable column. Title, all-day toggle, start, end, repeat, reminder, notes — view and edit on the same screen.
 - **Recurrence**, deliberately small: `daily / weekly / monthly` with a fixed `until` date. No exceptions, no by-day-of-month surgery — if you want an irregular pattern, make more events.
-- **Reminders**: per-event, optional, expressed as a single offset (`at start`, `5 min before`, `15 min`, `1 hour`, `1 day`). Fired locally via `AlarmManager.setExactAndAllowWhileIdle`. Recurring events lazily schedule the next alarm from inside the broadcast receiver, so we never enumerate thousands of alarms.
+- **Reminders**: per-event, optional, expressed as a single offset (`at start`, `5 min before`, `15 min`, `1 hour`, `1 day`). Fired locally via `AlarmManager.setExactAndAllowWhileIdle` when exact-alarm access is available, with an inexact `setAndAllowWhileIdle` fallback if the user revokes that access. Recurring events lazily schedule the next alarm from inside the broadcast receiver, so we never enumerate thousands of alarms.
 - **Import and export** through the Storage Access Framework: pick `.ics` files into the calendar, export a single event or the entire calendar as one `.ics`. No app-defined storage location.
 - **System share-in**: another app can hand a `.ics` to Still Cal via `ACTION_VIEW` (`text/calendar`); the events inside are imported and the user lands on whichever month contains the first one.
 - Font presets shared with the launcher and notes: **System** (serif + sans + mono), **Editorial** (Cormorant + Inter + Plex), **Terminal** (Plex Mono throughout), **Grotesk** (Instrument Serif + Space Grotesk).
@@ -56,12 +58,12 @@ Block-level parsing, type mapping, and writing are split across `IcsLexer.kt`, `
 
 ## What it asks for honestly
 
-Three permissions are unavoidable for a calendar with reminders. Each is requested at the moment it matters, and none touches the network.
+Three permissions are unavoidable for a calendar with reminders. The notification runtime permission is requested at the moment it matters; exact-alarm access is checked when reminders are saved. None touches the network.
 
 | Permission | Why it's there |
 | --- | --- |
 | `POST_NOTIFICATIONS` | Android 13+ runtime requirement to surface a reminder notification. Asked the first time a reminder is enabled on an event. |
-| `SCHEDULE_EXACT_ALARM` | Android 12+ runtime requirement for `setExactAndAllowWhileIdle`. A reminder that fires fifteen minutes late is broken. |
+| `SCHEDULE_EXACT_ALARM` | Android 12+ special access for exact reminder delivery. If the user revokes it, Still Cal warns at save time and uses the platform's inexact idle-tolerant alarm rather than dropping the reminder. |
 | `RECEIVE_BOOT_COMPLETED` | `AlarmManager` forgets every scheduled alarm across reboots; without this, tomorrow's 9am reminder dies after tonight's reboot. |
 
 ## Privacy posture, in code

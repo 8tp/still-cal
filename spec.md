@@ -27,7 +27,7 @@ This app must satisfy every line of the still pact:
 Three permissions ARE declared because they are unavoidable for a calendar with reminders. Each gets a row in the README's "what it refuses to do (and what it asks for honestly)" table:
 
 - `POST_NOTIFICATIONS` — Android 13+ runtime requirement to surface a notification. Asked the first time a reminder is enabled on an event.
-- `SCHEDULE_EXACT_ALARM` — Android 12+ runtime requirement for `setExactAndAllowWhileIdle`. A reminder that fires fifteen minutes late is broken.
+- `SCHEDULE_EXACT_ALARM` — Android 12+ special access for exact reminder delivery. If unavailable, save the event, show the exact-alarm toast, and fall back to the platform's inexact idle-tolerant alarm rather than dropping the reminder.
 - `RECEIVE_BOOT_COMPLETED` — `AlarmManager` forgets every scheduled alarm across reboots; without this the reminder for tomorrow's 9am stops mattering after tonight's reboot.
 
 None involve the network. None pull a third-party SDK.
@@ -227,7 +227,7 @@ If this picker proves too much for v0.1, the fallback is two `BasicTextField`s c
 
 ### 7.1 Scheduling
 
-- When an event with a reminder is saved (created or updated), compute the next occurrence's reminder timestamp and call `AlarmManager.setExactAndAllowWhileIdle(RTC_WAKEUP, triggerAtMs, pendingIntent)`.
+- When an event with a reminder is saved (created or updated), compute the next occurrence's reminder timestamp and call `AlarmManager.setExactAndAllowWhileIdle(RTC_WAKEUP, triggerAtMs, pendingIntent)` when exact-alarm access is available. If access is unavailable, warn and use `setAndAllowWhileIdle` as an honest fallback.
 - The `PendingIntent` targets `ReminderReceiver` with extras: event id, the occurrence's local date.
 - Use the event id's hashcode (positive) as the request code so reschedules replace the prior alarm.
 
@@ -238,7 +238,7 @@ If this picker proves too much for v0.1, the fallback is two `BasicTextField`s c
 
 ### 7.3 Boot
 
-- `BootReceiver` triggers on `BOOT_COMPLETED` and `LOCKED_BOOT_COMPLETED`. It iterates the index, recomputes the next reminder per event, reschedules.
+- `BootReceiver` triggers on `BOOT_COMPLETED` after credential-protected storage is available. It iterates the index, recomputes the next reminder per event, reschedules.
 - Deliberately keep the receiver fast — defer to `goAsync()` and a small coroutine scope.
 
 ### 7.4 Notification
@@ -250,7 +250,7 @@ If this picker proves too much for v0.1, the fallback is two `BasicTextField`s c
 ### 7.5 Permission flow
 
 - First time the user toggles a non-`none` reminder on any event, request `POST_NOTIFICATIONS`. If denied, save the event anyway, but show a one-line mono caption under the reminder row: `notifications disabled — reminder won't fire`.
-- Check `AlarmManager.canScheduleExactAlarms()` before each scheduling call. If false, drop a `Toast`: `enable exact alarms in settings`. Don't open the settings screen automatically (too aggressive).
+- When the user saves a reminder, check `AlarmManager.canScheduleExactAlarms()` before arming it and show `enable exact alarms in settings` if the app cannot schedule exact alarms. Non-UI scheduler paths such as import, boot restore, and receiver rescheduling must still guard the call, but they use the same inexact `setAndAllowWhileIdle` fallback without trying to open settings.
 
 ## 8. SAF I/O
 

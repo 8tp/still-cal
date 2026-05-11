@@ -6,15 +6,20 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chuds.stillcal.data.CalSettings
@@ -35,13 +40,12 @@ import dev.chuds.stillcal.ui.day.DayListScreen
 import dev.chuds.stillcal.ui.event.EventEditScreen
 import dev.chuds.stillcal.ui.month.MonthScreen
 import dev.chuds.stillcal.ui.settings.SettingsScreen
+import dev.chuds.stillcal.ui.theme.StillColors
 import dev.chuds.stillcal.ui.theme.LocalStillTypography
 import dev.chuds.stillcal.ui.theme.stillTypographyFor
 import dev.chuds.stillcal.ui.week.WeekScreen
 import java.time.LocalDate
 import java.time.YearMonth
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -52,6 +56,8 @@ import kotlinx.coroutines.launch
 fun StillCalApp(
     incomingDateOpen: LocalDate? = null,
     incomingViewUri: android.net.Uri? = null,
+    onIncomingDateOpenHandled: () -> Unit = {},
+    onIncomingViewUriHandled: () -> Unit = {},
 ) {
     val context = LocalContext.current.applicationContext
     val activityContext = LocalContext.current
@@ -61,14 +67,8 @@ fun StillCalApp(
 
     val notificationsPermission = rememberNotificationsPermissionState()
 
-    val settingsState = remember(preferencesRepository) {
-        preferencesRepository.settings.stateIn(
-            scope = scope,
-            started = SharingStarted.Eagerly,
-            initialValue = CalSettings(),
-        )
-    }
-    val settings by settingsState.collectAsStateWithLifecycle()
+    val loadedSettings by preferencesRepository.settings.collectAsState(initial = null)
+    val settings = loadedSettings ?: CalSettings()
     val events by eventsRepository.events.collectAsStateWithLifecycle()
 
     LaunchedEffect(eventsRepository) {
@@ -81,10 +81,11 @@ fun StillCalApp(
     var initialApplied by remember { mutableStateOf(false) }
 
     // Apply the cold-start default-view preference exactly once.
-    LaunchedEffect(settings.defaultView, initialApplied) {
-        if (!initialApplied) {
+    LaunchedEffect(loadedSettings?.defaultView, initialApplied) {
+        val loaded = loadedSettings ?: return@LaunchedEffect
+        if (!initialApplied && incomingDateOpen == null && incomingViewUri == null) {
             initialApplied = true
-            if (settings.defaultView == DefaultView.Week) {
+            if (loaded.defaultView == DefaultView.Week) {
                 routeStack.clear()
                 routeStack += Route.Week(LocalDate.now())
             }
@@ -94,14 +95,17 @@ fun StillCalApp(
     // Honor an incoming reminder-tap opening the day list for the event's date.
     LaunchedEffect(incomingDateOpen) {
         val date = incomingDateOpen ?: return@LaunchedEffect
+        initialApplied = true
         routeStack.clear()
         routeStack += Route.Month(YearMonth.from(date))
         routeStack += Route.DayList(date)
+        onIncomingDateOpenHandled()
     }
 
     // Honor an ACTION_VIEW text/calendar payload — import then jump to first imported event.
     LaunchedEffect(incomingViewUri) {
         val uri = incomingViewUri ?: return@LaunchedEffect
+        initialApplied = true
         scope.launch {
             val result = importIcsFromSingleUri(activityContext, uri, eventsRepository)
             Toast.makeText(
@@ -118,6 +122,7 @@ fun StillCalApp(
                 routeStack.clear()
                 routeStack += Route.Month(YearMonth.from(date))
             }
+            onIncomingViewUriHandled()
         }
     }
 
@@ -257,14 +262,22 @@ fun StillCalApp(
             )
             is Route.EventEdit -> {
                 val existing = route.id?.let { id -> events.firstOrNull { it.id == id } }
-                EventEditScreen(
-                    existing = existing,
-                    defaultDate = route.defaultDate ?: LocalDate.now(),
-                    notificationsPermission = notificationsPermission,
-                    onSave = ::saveEvent,
-                    onDelete = { existing?.let { deleteEvent(it.id) } },
-                    onCancel = { routeStack.removeAt(routeStack.lastIndex) },
-                )
+                if (route.id != null && existing == null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(StillColors.OledBlack),
+                    )
+                } else {
+                    EventEditScreen(
+                        existing = existing,
+                        defaultDate = route.defaultDate ?: LocalDate.now(),
+                        notificationsPermission = notificationsPermission,
+                        onSave = ::saveEvent,
+                        onDelete = { existing?.let { deleteEvent(it.id) } },
+                        onCancel = { routeStack.removeAt(routeStack.lastIndex) },
+                    )
+                }
             }
             Route.Settings -> SettingsScreen(
                 settings = settings,

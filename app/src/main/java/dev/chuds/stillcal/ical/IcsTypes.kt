@@ -16,9 +16,9 @@ import java.util.UUID
  * Mapping between iCalendar text and our [Event]. Tolerant on the way in (missing DTEND,
  * unknown timezone, no RRULE), strict-but-narrow on the way out.
  *
- * Open-question resolution (spec §15.1): we always write zone-anchored TZID times so a
- * round-trip produces byte-identical output. On import we still accept floating-time;
- * we anchor those to the device zone at read time and re-emit with TZID on next save.
+ * Open-question resolution (spec §15.1): we preserve authored zones where possible.
+ * UTC imports write back as Zulu date-times; named-zone and floating imports write
+ * back as zone-anchored TZID times, with floating values anchored to the device zone.
  */
 internal object IcsTypes {
 
@@ -127,8 +127,12 @@ internal object IcsTypes {
 
     private fun defaultEndFor(start: ParsedDateTime): ParsedDateTime {
         // Spec acceptance: missing DTEND → DTSTART + 1h, or +1 day for all-day events.
-        val delta = if (start.allDay) 24L * 60 * 60 * 1000 else 60L * 60 * 1000
-        return start.copy(epochMs = start.epochMs + delta)
+        if (!start.allDay) {
+            return start.copy(epochMs = start.epochMs + 60L * 60 * 1000)
+        }
+        val zone = start.zoneId ?: ZoneOffset.UTC
+        val end = start.localDate().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        return start.copy(epochMs = end)
     }
 
     private fun parseRrule(value: String, anchor: LocalDate, eventZone: ZoneId): Recurrence? {
