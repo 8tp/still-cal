@@ -127,8 +127,12 @@ internal object IcsTypes {
 
     private fun defaultEndFor(start: ParsedDateTime): ParsedDateTime {
         // Spec acceptance: missing DTEND → DTSTART + 1h, or +1 day for all-day events.
-        val delta = if (start.allDay) 24L * 60 * 60 * 1000 else 60L * 60 * 1000
-        return start.copy(epochMs = start.epochMs + delta)
+        if (!start.allDay) {
+            return start.copy(epochMs = start.epochMs + 60L * 60 * 1000)
+        }
+        val zone = start.zoneId ?: ZoneOffset.UTC
+        val end = start.localDate().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        return start.copy(epochMs = end)
     }
 
     private fun parseRrule(value: String, anchor: LocalDate, eventZone: ZoneId): Recurrence? {

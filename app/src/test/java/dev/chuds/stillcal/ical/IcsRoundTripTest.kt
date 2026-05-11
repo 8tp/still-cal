@@ -223,6 +223,28 @@ class IcsRoundTripTest {
     }
 
     @Test
+    fun missingAllDayDtendFallsBackToNextLocalDateAcrossDst() {
+        val chicago = ZoneId.of("America/Chicago")
+        val ics = """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//test//test//EN
+            BEGIN:VEVENT
+            UID:dst-fallback-all-day
+            DTSTART;VALUE=DATE:20261101
+            SUMMARY:fall back day
+            END:VEVENT
+            END:VCALENDAR
+        """.trimIndent().replace("\n", "\r\n")
+
+        val event = IcsTypes.toEvent(IcsParser.parseEvents(ics).single(), now = 0L, deviceZone = chicago)
+        val written = IcsWriter.writeCalendar(event)
+
+        assertTrue(written.contains("DTSTART;VALUE=DATE:20261101\r\n"))
+        assertTrue(written.contains("DTEND;VALUE=DATE:20261102\r\n"))
+    }
+
+    @Test
     fun untilDateSurvivesRoundTripInParisZone() {
         val paris = ZoneId.of("Europe/Paris")
         val event = Event(
