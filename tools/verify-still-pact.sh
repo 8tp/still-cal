@@ -98,7 +98,12 @@ def source_manifests(root):
     src = root / "app/src"
     if not src.is_dir():
         return []
-    return sorted(path for path in src.rglob("AndroidManifest.xml") if path.is_file())
+    return sorted(
+        path
+        for path in src.rglob("AndroidManifest.xml")
+        if path.is_file()
+        and not any(part.lower() in {"androidtest", "test"} for part in path.relative_to(src).parts)
+    )
 
 
 def format_names(names) -> str:
@@ -221,6 +226,8 @@ def merged_manifests(root):
     for path in intermediates.rglob("AndroidManifest.xml"):
         rel = path.relative_to(root)
         parts = rel.parts
+        if any("androidtest" in part.lower() for part in parts):
+            continue
         if any("merged" in part for part in parts) or "packaged_manifests" in parts:
             manifests.append(path)
     return sorted(set(manifests))
