@@ -56,6 +56,8 @@ import kotlinx.coroutines.launch
 fun StillCalApp(
     incomingDateOpen: LocalDate? = null,
     incomingViewUri: android.net.Uri? = null,
+    onIncomingDateOpenHandled: () -> Unit = {},
+    onIncomingViewUriHandled: () -> Unit = {},
 ) {
     val context = LocalContext.current.applicationContext
     val activityContext = LocalContext.current
@@ -97,6 +99,7 @@ fun StillCalApp(
         routeStack.clear()
         routeStack += Route.Month(YearMonth.from(date))
         routeStack += Route.DayList(date)
+        onIncomingDateOpenHandled()
     }
 
     // Honor an ACTION_VIEW text/calendar payload — import then jump to first imported event.
@@ -119,6 +122,7 @@ fun StillCalApp(
                 routeStack.clear()
                 routeStack += Route.Month(YearMonth.from(date))
             }
+            onIncomingViewUriHandled()
         }
     }
 
