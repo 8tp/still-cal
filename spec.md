@@ -250,7 +250,7 @@ If this picker proves too much for v0.1, the fallback is two `BasicTextField`s c
 ### 7.5 Permission flow
 
 - First time the user toggles a non-`none` reminder on any event, request `POST_NOTIFICATIONS`. If denied, save the event anyway, but show a one-line mono caption under the reminder row: `notifications disabled — reminder won't fire`.
-- When the user saves a reminder, check `AlarmManager.canScheduleExactAlarms()` before arming it and show `enable exact alarms in settings` if the app cannot schedule exact alarms. Non-UI scheduler paths such as import, boot restore, and receiver rescheduling must still guard the call, but they log and skip scheduling instead of trying to open settings.
+- When the user saves a reminder, check `AlarmManager.canScheduleExactAlarms()` before arming it and show `enable exact alarms in settings` if the app cannot schedule exact alarms. Non-UI scheduler paths such as import, boot restore, and receiver rescheduling must still guard the call, but they use the same inexact `setAndAllowWhileIdle` fallback without trying to open settings.
 
 ## 8. SAF I/O
 

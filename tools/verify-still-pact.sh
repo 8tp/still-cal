@@ -156,9 +156,23 @@ def config_files(root):
             yield path
 
 
-def latest_input_mtime(root):
-    paths = source_manifests(root)
+def latest_mtime(paths):
     return max((path.stat().st_mtime for path in paths if path.is_file()), default=0.0)
+
+
+def latest_source_mtime(root):
+    return latest_mtime(source_manifests(root))
+
+
+def latest_config_mtime(root):
+    return latest_mtime(list(config_files(root)))
+
+
+def latest_build_output_mtime(root):
+    outputs = root / "app/build/outputs"
+    if not outputs.is_dir():
+        return 0.0
+    return latest_mtime(path for path in outputs.rglob("*") if path.is_file())
 
 
 def strip_config_comments(path, text):
@@ -247,15 +261,18 @@ if expected_permissions is not None:
     merged_manifest_paths = merged_manifests(root)
     if not merged_manifest_paths:
         errors.append(f"{name}: no merged manifests found; run :app:assembleDebug before verifier")
-    input_mtime = latest_input_mtime(root)
+    source_mtime = latest_source_mtime(root)
+    config_mtime = latest_config_mtime(root)
+    build_output_mtime = latest_build_output_mtime(root)
     stale_merged = [
         str(path.relative_to(root))
         for path in merged_manifest_paths
-        if path.stat().st_mtime < input_mtime
+        if path.stat().st_mtime < source_mtime
+        or (path.stat().st_mtime < config_mtime and build_output_mtime < config_mtime)
     ]
     if stale_merged:
         errors.append(
-            f"{name}: merged manifests are older than source manifests; "
+            f"{name}: merged manifests are older than manifest/build inputs; "
             f"run :app:assembleDebug before verifier: {format_names(stale_merged)}"
         )
     for merged_manifest in merged_manifest_paths:
