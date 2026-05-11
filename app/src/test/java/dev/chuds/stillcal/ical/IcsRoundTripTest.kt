@@ -6,8 +6,11 @@ import dev.chuds.stillcal.data.ReminderOffset
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -63,6 +66,28 @@ class IcsRoundTripTest {
     }
 
     @Test
+    fun roundTrip_allDayLeapDaySpan() {
+        val event = Event(
+            id = "77777777-7777-7777-7777-777777777777",
+            title = "leap-day retreat",
+            notes = "",
+            startEpochMs = epochDateOnly(2028, 2, 28),
+            endEpochMs = epochDateOnly(2028, 3, 1),
+            allDay = true,
+            tzId = zoneId,
+            rrule = null,
+            reminder = null,
+            createdAt = 1_700_000_000_000L,
+            updatedAt = 1_700_000_300_000L,
+        )
+
+        val text = IcsWriter.writeCalendar(event)
+        assertTrue(text.contains("DTSTART;VALUE=DATE:20280228\r\n"))
+        assertTrue(text.contains("DTEND;VALUE=DATE:20280301\r\n"))
+        assertRoundTrip(event)
+    }
+
+    @Test
     fun roundTrip_recurringWithReminder() {
         val event = Event(
             id = "33333333-3333-3333-3333-333333333333",
@@ -78,6 +103,34 @@ class IcsRoundTripTest {
             updatedAt = 1_700_000_300_000L,
         )
         assertRoundTrip(event)
+    }
+
+    @Test
+    fun import_weeklyRecurrenceWithUntil() {
+        val ics = """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//test//test//EN
+            BEGIN:VEVENT
+            UID:weekly-until
+            DTSTART;TZID=America/New_York:20260504T090000
+            DTEND;TZID=America/New_York:20260504T100000
+            SUMMARY:weekly import
+            RRULE:FREQ=WEEKLY;UNTIL=20260629T235959Z
+            END:VEVENT
+            END:VCALENDAR
+        """.trimIndent().replace("\n", "\r\n")
+
+        val raw = IcsParser.parseEvents(ics).single()
+        val event = IcsTypes.toEvent(raw, now = 0L, deviceZone = ZoneId.of("Pacific/Auckland"))
+
+        assertEquals(Recurrence.Weekly(LocalDate.of(2026, 6, 29)), event.rrule)
+        assertEquals(zone.id, event.tzId)
+
+        val written = IcsWriter.writeCalendar(event)
+        assertTrue(written.contains("RRULE:FREQ=WEEKLY;UNTIL="))
+        val reparsed = IcsTypes.toEvent(IcsParser.parseEvents(written).single(), now = 0L, deviceZone = zone)
+        assertEquals(event.rrule, reparsed.rrule)
     }
 
     @Test
@@ -192,6 +245,73 @@ class IcsRoundTripTest {
         val raw = IcsParser.parseEvents(ics).single()
         val parsed = IcsTypes.toEvent(raw, now = event.updatedAt, deviceZone = zone)
         assertEquals(LocalDate.of(2026, 8, 1), (parsed.rrule as Recurrence.Weekly).until)
+    }
+
+    @Test
+    fun foldedMultiLineDescriptionWriterParserWriterIsByteIdentical() {
+        val notes = listOf(
+            "first line has commas, semicolons; and a backslash \\ marker",
+            "second line is deliberately long enough to fold after escaping because the " +
+                "iCalendar writer wraps DESCRIPTION fields at seventy-five octets",
+        ).joinToString("\n")
+        val event = Event(
+            id = "88888888-8888-8888-8888-888888888888",
+            title = "fold me",
+            notes = notes,
+            startEpochMs = epoch(2026, 5, 12, 9, 0),
+            endEpochMs = epoch(2026, 5, 12, 10, 0),
+            allDay = false,
+            tzId = zoneId,
+            rrule = null,
+            reminder = null,
+            createdAt = 1_700_000_000_000L,
+            updatedAt = 1_700_000_300_000L,
+        )
+
+        val once = IcsWriter.writeCalendar(event)
+        assertTrue("expected folded DESCRIPTION continuation", once.contains("DESCRIPTION:") && once.contains("\r\n "))
+
+        val raw = IcsParser.parseEvents(once).single()
+        val parsed = IcsTypes.toEvent(raw, now = event.updatedAt, deviceZone = zone)
+        assertEquals(notes, parsed.notes)
+
+        val twice = IcsWriter.writeCalendar(parsed)
+        assertArrayEquals(once.toByteArray(Charsets.UTF_8), twice.toByteArray(Charsets.UTF_8))
+    }
+
+    @Test
+    fun unsupportedFixtureFieldsAreDroppedWithoutThrowing() {
+        val ics = """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//test//test//EN
+            BEGIN:VEVENT
+            UID:lossy-fixture
+            DTSTART;TZID=America/New_York:20260504T090000
+            DTEND;TZID=America/New_York:20260504T100000
+            SUMMARY:external recurring meeting
+            DESCRIPTION:imported fixture
+            RRULE:FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20260630T035959Z
+            EXDATE;TZID=America/New_York:20260518T090000
+            ORGANIZER;CN=Host:mailto:host@example.com
+            ATTENDEE;CN=Guest One;ROLE=REQ-PARTICIPANT:mailto:one@example.com
+            ATTENDEE;CN=Guest Two;RSVP=TRUE:mailto:two@example.com
+            END:VEVENT
+            END:VCALENDAR
+        """.trimIndent().replace("\n", "\r\n")
+
+        val result = runCatching {
+            val raw = IcsParser.parseEvents(ics).single()
+            IcsTypes.toEvent(raw, now = 0L, deviceZone = zone)
+        }
+        assertTrue(result.exceptionOrNull()?.stackTraceToString(), result.isSuccess)
+
+        val written = IcsWriter.writeCalendar(result.getOrThrow())
+        assertTrue(written.contains("RRULE:FREQ=WEEKLY;UNTIL="))
+        assertFalse(written.contains("BYDAY"))
+        assertFalse(written.contains("EXDATE"))
+        assertFalse(written.contains("ORGANIZER"))
+        assertFalse(written.contains("ATTENDEE"))
     }
 
     @Test
